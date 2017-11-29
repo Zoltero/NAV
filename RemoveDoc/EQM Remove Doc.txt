@@ -1,0 +1,947 @@
+OBJECT Table 85010 Remove Doc C/AL History Line
+{
+  OBJECT-PROPERTIES
+  {
+    Date=29.11.17;
+    Time=12.00.00;
+    Version List=REMOVE DOC;
+  }
+  PROPERTIES
+  {
+    DataPerCompany=No;
+    CaptionML=[ENU=C/AL History Line;
+               NLD=C/AL Historieregel];
+  }
+  FIELDS
+  {
+    { 1   ;   ;Entry No.           ;Integer       ;CaptionML=[ENU=Entry No.;
+                                                              NLD=Volgnummer] }
+    { 2   ;   ;Line No.            ;Integer       ;CaptionML=[ENU=Line No.;
+                                                              NLD=Regelnr.] }
+    { 3   ;   ;Sub Line No.        ;Integer       ;CaptionML=[ENU=Sub Line No.;
+                                                              NLD=Subregelnr.] }
+    { 4   ;   ;Code                ;Text250       ;CaptionML=[ENU=Code;
+                                                              NLD=Code] }
+    { 15000600;;Object Id          ;Integer       ;TableRelation=Object;
+                                                   CaptionML=ENU=Object Id }
+  }
+  KEYS
+  {
+    {    ;Entry No.,Line No.,Sub Line No.         ;Clustered=Yes }
+    {    ;Object Id                                }
+  }
+  FIELDGROUPS
+  {
+  }
+  CODE
+  {
+
+    BEGIN
+    END.
+  }
+}
+
+OBJECT Report 85010 Remove Doc Trigger 2017
+{
+  OBJECT-PROPERTIES
+  {
+    Date=29.11.17;
+    Time=12.00.00;
+    Modified=Yes;
+    Version List=REMOVE DOC;
+  }
+  PROPERTIES
+  {
+    ProcessingOnly=Yes;
+    OnPreReport=BEGIN
+                  //IF GUIALLOWED THEN
+                  //  IF NOT CONFIRM(ConfirmJobTxt) THEN
+                  //    ERROR('');
+
+                  IF FileName = '' THEN
+                    ERROR(FileNameCannotBeEmptyTxt);
+
+                  CLEAR(RemoveDocTriggerMgt);
+                  RemoveDocTriggerMgt.SetFileName(FileName);
+                  RemoveDocTriggerMgt.SetLabelText(LabelText);
+                  RemoveDocTriggerMgt.AddObject(TRUE);
+                END;
+
+  }
+  DATASET
+  {
+  }
+  REQUESTPAGE
+  {
+    PROPERTIES
+    {
+      OnOpenPage=BEGIN
+                   IF USERID = 'ARMADA\MSO' THEN
+                     FileName := 'C:\Users\mso.ARMADA\Documents\Merge\Merge_1.txt';
+
+                   LabelText := Label_Txt;
+                 END;
+
+    }
+    CONTROLS
+    {
+      { 15000600;;Container ;
+                  ContainerType=ContentArea }
+
+      { 15000601;1;Group    ;
+                  CaptionML=ENU=Options;
+                  GroupType=Group }
+
+      { 15000602;2;Field    ;
+                  CaptionML=ENU=File Name;
+                  SourceExpr=FileName;
+                  OnLookup=VAR
+                             TempFileName@15000600 : Text;
+                           BEGIN
+                             TempFileName := FileMgt.OpenFileDialog(WindowTitleTxt,'','');
+                             IF (FileName <> TempFileName) AND (TempFileName <> '') THEN BEGIN
+                               Text := TempFileName;
+                               EXIT(TRUE);
+                             END;
+                           END;
+                            }
+
+      { 15000603;2;Field    ;
+                  CaptionML=ENU=Label text;
+                  SourceExpr=LabelText }
+
+    }
+  }
+  LABELS
+  {
+  }
+  CODE
+  {
+    VAR
+      RemoveDocTriggerMgt@15000608 : Codeunit 85010;
+      FileMgt@15000609 : Codeunit 419;
+      FileName@15000600 : Text;
+      FileNameCannotBeEmptyTxt@15000606 : TextConst 'ENU=File name cannot be empty.';
+      WindowTitleTxt@15000605 : TextConst 'ENU=Select file';
+      LabelText@15000601 : Text;
+      Label_Txt@15000602 : TextConst 'ENU=EQM2017 - ARMADA DYNAMICS AS (c) 2003-2017';
+
+    BEGIN
+    END.
+  }
+  RDLDATA
+  {
+  }
+}
+
+OBJECT Codeunit 85010 Remove Doc Trigger Mgt 2013
+{
+  OBJECT-PROPERTIES
+  {
+    Date=29.11.17;
+    Time=12.00.00;
+    Modified=Yes;
+    Version List=REMOVE DOC;
+  }
+  PROPERTIES
+  {
+    OnRun=BEGIN
+            ERROR('Start job from Report 85010');
+          END;
+
+  }
+  CODE
+  {
+    VAR
+      ReplaceAction@15000620 : ARRAY [100] OF Text[250];
+      ExclusiveAction@15000619 : ARRAY [100] OF Text[250];
+      NoOfReplaceActions@15000618 : Integer;
+      NoOfExclusiveActions@15000617 : Integer;
+      FileName@15000616 : ARRAY [2] OF Text[1024];
+      WindowIsOpen@15000621 : Boolean;
+      Window@15000606 : Dialog;
+      TotalRec@15000605 : Integer;
+      CurrRec@15000604 : Integer;
+      TotalTables@15000603 : Integer;
+      Counter1@15000602 : Integer;
+      Counter2@15000601 : Integer;
+      CounterBreak@15000600 : Integer;
+      Text001@15000614 : TextConst 'ENU=Remove Documentation Trigger and Remarks;NOR=Fjerner dokumentartrigger og kommentarer';
+      Text002@15000613 : TextConst 'ENU=Type;NOR=Type';
+      Text003@15000612 : TextConst 'ENU=Object;NOR=Objekt';
+      Text004@15000611 : TextConst 'ENU=Total objects;NOR=Totalt antall objekter';
+      Text005@15000610 : TextConst 'ENU=Total lines;NOR=Totalt antall linjer';
+      Text007@15000609 : TextConst 'ENU=Gather remark lines;NOR=Samler kommentarlinjer';
+      Text008@15000608 : TextConst 'ENU=Update remarks;NOR=Oppdatere kommentarer';
+      Text009@15000607 : TextConst 'ENU=Write to file;NOR=Skrive til fil';
+      FileDoesNotExistErr@15000622 : TextConst 'ENU=The file %1 does not exist.;NOR=Filen %1 finnes ikke.';
+      FileCouldNotBeReadErr@15000623 : TextConst 'ENU=The file %1 could not be read.;NOR=Det var ikke mulig † lese filen %1.';
+      FileCouldNotBeCreatedErr@15000624 : TextConst 'ENU=The file %1 could not be created.;NOR=Det var ikke mulig † opprette filen %1.';
+      LabelText@15000615 : Text;
+      Label_Txt@15000625 : TextConst 'ENU=EQM2017 - ARMADA DYNAMICS AS (c) 2003-2017';
+
+    PROCEDURE RunFromPowershell@15000601(NewFileName@15000600 : Text);
+    BEGIN
+      FileName[1] := NewFileName;
+      LabelText := Label_Txt;
+      AddObject(FALSE);
+    END;
+
+    PROCEDURE AddObject@1101101030(ShowDialog@15000628 : Boolean);
+    VAR
+      TmpCALHistoryLine@1101101012 : TEMPORARY Record 85010;
+      TmpCALHistoryHeader@1101101013 : TEMPORARY Record 85010;
+      Object@1101101000 : Record 2000000001;
+      FileMgt@15000605 : Codeunit 419;
+      FileSystemObject@15000600 : Automation "{420B2830-E718-11CF-893D-00A0C9054228} 1.0:{0D43FE01-F093-11CF-8940-00A0C9054228}:'Microsoft Scripting Runtime'.FileSystemObject";
+      DocumentationTrigger@15000616 : Boolean;
+      EmptyDocTrigger@15000622 : Boolean;
+      AddEmptyDocTrigger@15000623 : Boolean;
+      ReadChar@15000607 : Char;
+      FileIn@15000603 : File;
+      FileOut@15000602 : File;
+      CharacterCounter@15000613 : Integer;
+      CodeLineCounter@15000612 : Integer;
+      i@15000611 : Integer;
+      LineCharacterCounter@15000610 : Integer;
+      SubLineCounter@15000609 : Integer;
+      PrevLineNo@15000608 : Integer;
+      DelFromLine@15000615 : Integer;
+      DelToLine@15000614 : Integer;
+      CurrDelLine@15000619 : Integer;
+      StartLineNo@15000618 : Integer;
+      j@15000617 : Integer;
+      ObjectId@15000621 : Integer;
+      PrevObjectId@15000620 : Integer;
+      PROCEDURE_Id@15000624 : Integer;
+      ObjectType@15000626 : 'Table,Form,Report,Dataport,XMLport,Codeunit,Page,Query';
+      Directory@1101101001 : Text[1024];
+      Line@1101101011 : ARRAY [10] OF Text[250];
+      TmpLine@1101101016 : Text[250];
+      TmpLine2@1101101014 : Text[250];
+      FileExtension@15000606 : Text[10];
+      ServerFileName@15000604 : Text;
+      ClientFileName@15000601 : Text;
+      PrevLine@1101101017 : Text[250];
+      TempFileName@15000627 : Text;
+      LastFoundPos@15000629 : Integer;
+    BEGIN
+      IF ShowDialog AND GUIALLOWED THEN BEGIN
+        Window.OPEN(Text001 + '\' +
+           FORMAT(Text002,20) + '#1###############' + '\' +
+           FORMAT(Text003,20) + '#2###############' + ' ' + '#10####################' + '\' +
+           FORMAT(Text004,20) + '#4###############' + '\' +
+           FORMAT(Text005,20) + '#5###############' + '\' +
+           //FORMAT(Text006,20) + '#6###############' + '\\' +
+           FORMAT(Text007,20) + '@7@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@' + '\' +
+           FORMAT(Text008,20) + '@8@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@' + '\' +
+           FORMAT(Text009,20) + '@9@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@' + '\');
+        WindowIsOpen := TRUE;
+      END;
+
+      BuildReplaceActionArray;
+      BuildExclusiveActionArray;
+
+      TmpCALHistoryLine.RESET;
+      TmpCALHistoryLine.DELETEALL;
+      TmpCALHistoryHeader.RESET;
+      TmpCALHistoryHeader.DELETEALL;
+
+      OpenToRead(FileIn);
+
+      SubLineCounter := 1;
+      ObjectType := ObjectType::Table;
+
+      WHILE FileIn.READ(ReadChar) > 0 DO BEGIN
+        CharacterCounter += 1;
+
+        CASE ReadChar OF
+          13,10 :
+            BEGIN
+              CharacterCounter := 0;
+              CodeLineCounter += 10;
+
+              FOR i := 1 TO SubLineCounter DO BEGIN
+                TmpCALHistoryLine."Line No." := CodeLineCounter;
+                TmpCALHistoryLine."Sub Line No." := i;
+
+                TmpLine := Line[i];
+                TmpLine2 := TmpLine;
+
+                j := 0;
+                //:ObjectType := ObjectType::Table;
+
+                IF STRPOS(UPPERCASE(TmpLine2),'OBJECT') = 1 THEN
+                  CASE TRUE OF
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT TABLE') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT TABLE ');
+                        ObjectType := ObjectType::Table;
+                      END;
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT CODEUNIT ') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT CODEUNIT ');
+                        ObjectType := ObjectType::Codeunit;
+                      END;
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT XMLPORT') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT XMLPORT ');
+                        ObjectType := ObjectType::XMLport;
+                      END;
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT PAGE') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT PAGE ');
+                        ObjectType := ObjectType::Page;
+                      END;
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT REPORT') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT REPORT ');
+                        ObjectType := ObjectType::Report;
+                      END;
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT DATAPORT ') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT DATAPORT ');
+                        ObjectType := ObjectType::Dataport;
+                      END;
+
+                    STRPOS(UPPERCASE(TmpLine2),'OBJECT QUERY') <> 0:
+                      BEGIN
+                        j := STRLEN('OBJECT QUERY ');
+                        ObjectType := ObjectType::Query;
+                      END;
+                  END;
+
+                IF j <> 0 THEN BEGIN
+                  TmpLine2 := DELSTR(TmpLine2,1,j);
+                  TmpLine2 := COPYSTR(TmpLine2,1,STRPOS(TmpLine2,' '));
+
+                  EVALUATE(ObjectId,TmpLine2);
+                  TmpCALHistoryLine."Object Id" := ObjectId;
+                  CurrRec := 0;
+                  TotalTables += 1;
+                  IF WindowIsOpen THEN BEGIN
+                    Window.UPDATE(4,TotalTables);
+                    Window.UPDATE(1,ObjectType);
+                    Window.UPDATE(2,ObjectId);
+                  END;
+                  IF NOT Object.GET(ObjectType,COMPANYNAME,ObjectId) THEN
+                    IF Object.GET(ObjectType,'',ObjectId) THEN
+                      ;
+                  IF WindowIsOpen THEN
+                    Window.UPDATE(10,Object.Name);
+                END;
+
+                IF ObjectId <> PrevObjectId THEN
+                  PROCEDURE_Id := 0;
+                PrevObjectId := ObjectId;
+
+                IF ObjectId <> 0 THEN BEGIN
+                  IF IdRange(ObjectId) THEN BEGIN                       // IdRange2
+                    Get_PROCEDURE_Id(Line[i],PROCEDURE_Id);
+                    RemoveObjName(Line[i],'',ObjectId,PROCEDURE_Id);
+                    ChangeDescription(Line[i],ObjectId);
+                  END ELSE
+                    RemoveColonRemark(Line[i],ObjectId);
+                END;
+
+                IF NOT ((Line[i] <> TmpLine) AND (Line[i] = '')) THEN BEGIN
+                  IF NOT SkipObject(ObjectType,ObjectId) THEN BEGIN
+                    TmpCALHistoryLine.Code := Line[i];
+                    TmpCALHistoryLine.INSERT;
+                  END;
+                  CurrRec += 1;
+                  TotalRec += 1;
+                  IF TotalRec MOD 100 = 0 THEN
+                    IF WindowIsOpen THEN
+                      Window.UPDATE(5,TotalRec);
+                END;
+              END;
+
+              CLEAR(Line);
+              IF ReadChar = 13 THEN
+                FileIn.READ(ReadChar);
+              CharacterCounter += 1;
+              LineCharacterCounter := 0;
+              SubLineCounter := 1;
+            END;
+          ELSE BEGIN
+            LineCharacterCounter += 1;
+            IF LineCharacterCounter MOD 245 = 0 THEN
+              SubLineCounter += 1;
+            Line[SubLineCounter] += FORMAT(ReadChar);
+          END;
+        END;
+      END;
+
+      FileIn.CLOSE;
+
+      Counter1 := 0;
+      Counter2 := 0;
+      TotalRec := 0;
+
+      TmpCALHistoryLine.RESET;
+      IF TmpCALHistoryLine.FIND('-') THEN BEGIN
+        TotalRec := TmpCALHistoryLine.COUNT;
+        CounterBreak := ROUND(TotalRec / 100,1,'>');
+        TotalRec := 0;
+        REPEAT
+          Counter1 := Counter1 + 1;
+          Counter2 := Counter2 + 1;
+          IF TotalRec > 0 THEN
+            IF Counter2 >= CounterBreak THEN BEGIN
+              Counter2 := 0;
+              IF WindowIsOpen THEN
+                Window.UPDATE(7,ROUND(Counter1 / TotalRec * 10000,1));
+            END;
+
+          TmpCALHistoryHeader.RESET;
+          TmpCALHistoryHeader.SETCURRENTKEY("Object Id");
+          TmpCALHistoryHeader.SETRANGE("Object Id",TmpCALHistoryLine."Object Id");
+          IF NOT TmpCALHistoryHeader.FIND('-') THEN BEGIN
+            TmpCALHistoryHeader := TmpCALHistoryLine;
+            TmpCALHistoryHeader.INSERT;
+            TotalRec += 1;
+          END;
+        UNTIL TmpCALHistoryLine.NEXT = 0;
+      END;
+
+      Counter1 := 0;
+
+      TmpCALHistoryHeader.RESET;
+      IF TmpCALHistoryHeader.FIND('-') THEN
+        REPEAT
+          Counter1 := Counter1 + 1;
+          IF WindowIsOpen THEN
+            Window.UPDATE(8,ROUND(Counter1 / TotalRec * 10000,1));
+
+          DelFromLine := 0;
+          DelToLine := 0;
+          DocumentationTrigger := FALSE;
+
+          TmpCALHistoryLine.RESET;
+          TmpCALHistoryLine.SETCURRENTKEY("Object Id");
+          TmpCALHistoryLine.SETRANGE("Object Id",TmpCALHistoryHeader."Object Id");
+          IF TmpCALHistoryLine.FIND('-') THEN
+            REPEAT
+              TmpLine := DELCHR(TmpCALHistoryLine.Code,'=',' ');
+              IF (TmpLine = 'BEGIN') AND (PrevLine = '') THEN
+                DelFromLine := TmpCALHistoryLine."Line No." + 1;
+              IF (TmpLine = '{') AND (DelFromLine <> 0) THEN
+                IF DELCHR(PrevLine,'=',' ') = 'BEGIN' THEN
+                  DocumentationTrigger := TRUE;
+              IF (TmpLine = 'END.') AND (DelFromLine <> 0) THEN
+                DelToLine := TmpCALHistoryLine."Line No." - 1;
+
+              IF StrPos2(TmpLine,'description=}',1) > 0 THEN BEGIN
+                TmpCALHistoryLine.NEXT(-1);
+                LastFoundPos := 0;
+                j := 0;
+                IF StrPos2(TmpCALHistoryLine.Code,';',1) > 0 THEN BEGIN
+                  j := 1;
+                  REPEAT
+                    j := StrPos2(TmpCALHistoryLine.Code,';',j);
+                    IF j <> 0 THEN BEGIN
+                      LastFoundPos := j;
+                      j += 1;
+                    END;
+                  UNTIL j = 0;
+                  j := LastFoundPos;
+                END;
+
+                IF j > 0 THEN BEGIN
+                  TmpCALHistoryLine.Code := DELSTR(TmpCALHistoryLine.Code,j);
+                  TmpCALHistoryLine.Code := TmpCALHistoryLine.Code + ' }';
+                  TmpCALHistoryLine.MODIFY;
+                END;
+                TmpCALHistoryLine.NEXT;
+                TmpCALHistoryLine.DELETE;
+              END;
+              PrevLine := TmpCALHistoryLine.Code;
+            UNTIL TmpCALHistoryLine.NEXT = 0;
+
+            EmptyDocTrigger := FALSE;
+
+            IF NOT DocumentationTrigger THEN BEGIN
+              TmpCALHistoryLine.RESET;
+              TmpCALHistoryLine.SETCURRENTKEY("Object Id");
+              TmpCALHistoryLine.SETRANGE("Object Id",TmpCALHistoryHeader."Object Id");
+              IF TmpCALHistoryLine.FIND('-') THEN
+                REPEAT
+                  TmpLine := DELCHR(TmpCALHistoryLine.Code,'=',' ');
+                  IF (TmpLine = 'END.') AND (PrevLine = 'BEGIN') THEN BEGIN
+                    EmptyDocTrigger := TRUE;
+                    DelFromLine := TmpCALHistoryLine."Line No." - 5;
+                  END;
+                  PrevLine := DELCHR(TmpCALHistoryLine.Code,'=',' ');
+                UNTIL (TmpCALHistoryLine.NEXT = 0) OR EmptyDocTrigger;
+            END;
+
+            CurrDelLine := 0;
+            StartLineNo := 0;
+            CurrRec := 0;
+            AddEmptyDocTrigger := FALSE;
+
+            IF DocumentationTrigger THEN
+              IF (DelFromLine <> 0) AND (DelFromLine < DelToLine) THEN BEGIN
+                EmptyDocTrigger := FALSE;
+                IF (IdRange(TmpCALHistoryHeader."Object Id")) THEN BEGIN
+                  TmpCALHistoryLine.RESET;
+                  TmpCALHistoryLine.SETCURRENTKEY("Object Id");
+                  TmpCALHistoryLine.SETFILTER("Line No.",'>=%1&<=%2',DelFromLine,DelToLine);
+                  TmpCALHistoryLine.SETRANGE("Object Id",TmpCALHistoryHeader."Object Id");
+                  TmpCALHistoryLine.DELETEALL;
+                  EmptyDocTrigger := TRUE;
+                  CurrDelLine := DelFromLine;
+                END;
+
+                IF EmptyDocTrigger THEN BEGIN
+                  IF StartLineNo <> 0 THEN
+                    CurrDelLine := StartLineNo + 5;
+
+                  IF CurrDelLine <> 0 THEN BEGIN
+                    CodeLineCounter := CurrDelLine;
+
+                    TmpCALHistoryLine."Line No." := CodeLineCounter;
+                      AddEmptyDocTrigger := TRUE;
+                  END;
+                END;
+              END;
+
+            IF NOT DocumentationTrigger THEN
+              IF EmptyDocTrigger THEN BEGIN
+                CodeLineCounter := DelFromLine;
+                AddEmptyDocTrigger := TRUE;
+              END;
+
+            IF AddEmptyDocTrigger THEN
+              IF CodeLineCounter <> 0 THEN BEGIN
+                TmpCALHistoryLine.RESET;
+                CodeLineCounter += 1;
+                TmpCALHistoryLine."Line No." := CodeLineCounter;
+                TmpCALHistoryLine.Code := '    {';
+                TmpCALHistoryLine."Object Id" := TmpCALHistoryHeader."Object Id";
+                TmpCALHistoryLine.INSERT;
+
+                CodeLineCounter += 1;
+                TmpCALHistoryLine."Line No." := CodeLineCounter;
+                IF LabelText = '' THEN
+                  TmpCALHistoryLine.Code := '      EQM2017NA - ARMADA DYNAMICS AS (c) 2003-2017'
+                ELSE
+                  TmpCALHistoryLine.Code := '      ' + LabelText;
+
+                TmpCALHistoryLine."Object Id" := TmpCALHistoryHeader."Object Id";
+                TmpCALHistoryLine.INSERT;
+
+                CodeLineCounter += 1;
+                TmpCALHistoryLine."Line No." := CodeLineCounter;
+                TmpCALHistoryLine.Code := '    }';
+                TmpCALHistoryLine."Object Id" := TmpCALHistoryHeader."Object Id";
+                TmpCALHistoryLine.INSERT;
+              END;
+
+        UNTIL TmpCALHistoryHeader.NEXT = 0;
+
+      TmpCALHistoryLine.RESET;
+      TmpCALHistoryHeader.RESET;
+
+      TempFileName := FileName[1];
+      REPEAT
+        i := STRPOS(TempFileName,'.');
+        IF i > 0 THEN BEGIN
+          TempFileName := DELSTR(TempFileName,i,1);
+          TempFileName := INSSTR(TempFileName,',',i);
+          j := i;
+        END;
+      UNTIL i = 0;
+
+      FileName[2] := INSSTR(FileName[1],'_IMP',j);
+      FileExtension := FileMgt.GetExtension(Directory + FileName[2]);
+      ServerFileName := FileMgt.ServerTempFileName(FileExtension);
+
+      FileOut.TEXTMODE(TRUE);
+      FileOut.WRITEMODE(TRUE);
+
+      IF NOT FileOut.CREATE(ServerFileName) THEN
+        IF NOT FileOut.OPEN(ServerFileName) THEN
+          ERROR(FileCouldNotBeCreatedErr,FileName[2]);
+
+      PrevLineNo := 0;
+      Counter1 := 0;
+      Counter2 := 0;
+
+      TmpCALHistoryLine.RESET;
+      IF TmpCALHistoryLine.FIND('-') THEN BEGIN
+        TotalRec := TmpCALHistoryLine.COUNT;
+        CounterBreak := ROUND(TotalRec / 100,1,'>');
+        REPEAT
+          Counter1 := Counter1 + 1;
+          Counter2 := Counter2 + 1;
+          IF Counter2 >= CounterBreak THEN BEGIN
+            Counter2 := 0;
+            IF WindowIsOpen THEN
+              Window.UPDATE(9,ROUND(Counter1 / TotalRec * 10000,1));
+          END;
+
+          IF TmpCALHistoryLine."Line No." = PrevLineNo THEN
+            FileOut.SEEK(FileOut.POS - 2);
+          FileOut.WRITE(TmpCALHistoryLine.Code);
+          PrevLineNo := TmpCALHistoryLine."Line No.";
+        UNTIL TmpCALHistoryLine.NEXT = 0;
+      END;
+
+      FileOut.CLOSE;
+
+      IF FileMgt.ServerFileExists(ServerFileName) THEN BEGIN
+        IF GUIALLOWED THEN BEGIN
+          ClientFileName := FileMgt.DownloadTempFile(ServerFileName);
+          IF NOT ISCLEAR(FileSystemObject) THEN
+            CLEAR(FileSystemObject);
+          CREATE(FileSystemObject,TRUE,TRUE);
+          IF FileSystemObject.FileExists(Directory + FileName[2]) THEN
+            FileSystemObject.DeleteFile(Directory + FileName[2],TRUE);
+          FileSystemObject.CopyFile(ClientFileName,Directory + FileName[2]);
+          FileSystemObject.DeleteFile(ClientFileName,TRUE);
+          FileMgt.DeleteServerFile(ServerFileName);
+          EXIT;
+        END;
+        IF EXISTS(Directory + FileName[2]) THEN
+          ERASE(Directory + FileName[2]);
+        COPY(ServerFileName,Directory + FileName[2]);
+        ERASE(ServerFileName);
+      END;
+    END;
+
+    LOCAL PROCEDURE RemoveObjName@1101101042(VAR CALLine@1101101000 : Text[1024];RemarkChar@1101101006 : Text[10];ObjectId@1101101007 : Integer;PROCEDURE_Id@1101101012 : Integer);
+    VAR
+      i@1101101001 : Integer;
+      FoundStrPos@1101101002 : Integer;
+      FoundStrPos2@1101101004 : Integer;
+      FoundStrPos3@1101101011 : Integer;
+      TestLine@1101101003 : Text[1024];
+      j@1101101005 : Integer;
+      BeginChar@1101101008 : Boolean;
+      EndChar@1101101009 : Boolean;
+      RemoveMark@1101101010 : Boolean;
+    BEGIN
+      IF RemarkChar = '' THEN BEGIN
+
+        FoundStrPos := STRPOS(CALLine,'//:');
+
+        IF FoundStrPos = 0 THEN BEGIN
+          REPEAT
+              i += 1;
+              FoundStrPos := StrPos2(CALLine, ReplaceAction[i], 1);
+          UNTIL (i > NoOfReplaceActions) OR (FoundStrPos <> 0);
+
+          FoundStrPos2 := 0;
+          j := 0;
+          REPEAT
+            j += 1;
+            FoundStrPos2 := StrPos2(CALLine, ExclusiveAction[j],1);
+          UNTIL (FoundStrPos2 <> 0) OR (j > NoOfExclusiveActions);
+        END;
+      END;
+
+      IF RemarkChar <> '' THEN
+        FoundStrPos := StrPos2(CALLine, RemarkChar, 1);
+
+      IF FoundStrPos2 = 0 THEN BEGIN
+        IF FoundStrPos = 1 THEN
+          CALLine := '';
+        IF FoundStrPos <> 0 THEN
+          IF COPYSTR(CALLine,FoundStrPos,1) <> '/' THEN
+            FoundStrPos := StrPos2(CALLine, '//', 1);
+
+        IF FoundStrPos <> 0 THEN BEGIN
+          BeginChar := (STRPOS(LOWERCASE(CALLine),'begin') <> 0) OR (STRPOS(CALLine,'->') <> 0);
+          EndChar := (STRPOS(LOWERCASE(CALLine),'end') <> 0) OR (STRPOS(CALLine,'<-') <> 0);
+          IF BeginChar THEN
+            IF (STRPOS(LOWERCASE(CALLine),'then') <> 0) THEN
+              BeginChar := FALSE;
+          IF EndChar THEN
+             IF (STRPOS(CALLine,';') <> 0) OR (STRPOS(LOWERCASE(CALLine),'else') <> 0)THEN
+               EndChar := FALSE;
+
+          RemoveMark := STRPOS(CALLine,'//:') <> 0;
+          IF RemoveMark THEN
+            IF 1 = 1 THEN
+              IF 1 = 1 THEN
+                ;
+          CALLine := DELSTR(CALLine, FoundStrPos);
+          IF IdRange2(ObjectId) OR IdRange2(PROCEDURE_Id) THEN
+            CALLine := DELCHR(CALLine,'>',' ');
+
+          FoundStrPos3 := STRPOS(CALLine,'//:');
+          IF FoundStrPos3 <> 0 THEN BEGIN
+            CALLine := DELSTR(CALLine, FoundStrPos3);
+            CALLine := DELCHR(CALLine,'>',' ');
+          END;
+
+          TestLine := DELCHR(CALLine,'=',' ');
+          IF TestLine = '' THEN
+            IF IdRange2(ObjectId) THEN
+              RemoveMark := TRUE;
+        END;
+      END;
+
+      IF (FoundStrPos = 0) OR RemoveMark THEN BEGIN
+        TestLine := DELCHR(CALLine,'=',' ');
+        IF TestLine = '' THEN
+          CALLine := '';
+        FoundStrPos := 0;
+      END;
+
+      IF (FoundStrPos > 0) AND (FoundStrPos2 = 0) THEN
+        IF NOT IdRange2(PROCEDURE_Id) THEN
+          IF NOT IdRange2(ObjectId) THEN BEGIN
+            CALLine := INSSTR(CALLine,'// EQM:Armada',FoundStrPos);
+            IF BeginChar THEN
+              CALLine := CALLine + ':Begin';
+            IF EndChar THEN
+              CALLine := CALLine + ':End';
+          END;
+    END;
+
+    LOCAL PROCEDURE RemoveColonRemark@1101101006(VAR CallLine@1101101000 : Text[1024];ObjectId@1101101002 : Integer);
+    VAR
+      RemarkChar@1101101001 : Text[10];
+    BEGIN
+      RemarkChar := '//:';
+      RemoveObjName(CallLine,RemarkChar,ObjectId,0);
+    END;
+
+    LOCAL PROCEDURE ChangeDescription@1101101009(VAR CALLine@1101101000 : Text[1024];ObjectId@1101101005 : Integer);
+    VAR
+      i@1101101001 : Integer;
+      j@15000600 : Integer;
+      FoundStrPos@1101101002 : Integer;
+      FoundStrPos2@1101101004 : Integer;
+      EndMark@1101101006 : Boolean;
+    BEGIN
+      j := 0;
+      REPEAT
+        j += 1;
+        FoundStrPos2 := StrPos2(CALLine, ExclusiveAction[j],1);
+      UNTIL (FoundStrPos2 <> 0) OR (j > NoOfExclusiveActions);
+
+      IF FoundStrPos2 > 0 THEN
+        EXIT;
+
+      REPEAT
+          i += 1;
+          FoundStrPos := StrPos2(CALLine, 'description=', 1);
+      UNTIL (i > NoOfReplaceActions) OR (FoundStrPos <> 0);
+
+      IF FoundStrPos <> 0 THEN BEGIN
+        EndMark := STRPOS(CALLine,'}') <> 0;
+        CALLine := DELSTR(CALLine, FoundStrPos);
+      END;
+
+      IF FoundStrPos > 0 THEN BEGIN
+        IF NOT IdRange2(ObjectId) THEN
+          CALLine := INSSTR(CALLine,'Description=EQM:Armada',FoundStrPos)
+        ELSE
+          CALLine := INSSTR(CALLine,'Description=',FoundStrPos);
+
+        IF CALLine <> '' THEN
+          IF EndMark THEN
+            CALLine := CALLine + ' }'
+          ELSE
+            CALLine := CALLine + ';';
+      END;
+    END;
+
+    LOCAL PROCEDURE StrPos2@1000010(String1@1000000 : Text[1024];String2@1000001 : Text[1024];StartPos@1000002 : Integer) ExitValue : Integer;
+    VAR
+      LocalString@1000003 : Text[1024];
+    BEGIN
+      LocalString := COPYSTR(String1, StartPos);
+      LocalString := LOWERCASE(LocalString);
+
+      ExitValue := STRPOS(LocalString, String2);
+
+      IF ExitValue > 0 THEN
+        ExitValue += StartPos - 1;
+    END;
+
+    LOCAL PROCEDURE BuildReplaceActionArray@1101101022();
+    BEGIN
+      NoOfReplaceActions := 0;
+
+      ///AddReplaceAction('// ar');
+      //AddReplaceAction('//a');
+      ///AddReplaceAction('// a8');
+      AddReplaceAction('//aim');
+      AddReplaceAction('// aim');
+      AddReplaceAction('//-');
+      AddReplaceAction('// ---');
+      AddReplaceAction('aimeqm');
+      AddReplaceAction('rreqm');
+      AddReplaceAction('xxxbar');
+      AddReplaceAction('fix+');
+      AddReplaceAction('fix +');
+      AddReplaceAction('fix-');
+      AddReplaceAction('fix -');
+      AddReplaceAction('xxx');
+      AddReplaceAction(':aimit');
+      //AddReplaceAction('//salesHeader');
+      //AddReplaceAction('//ghost');
+      AddReplaceAction('// func');
+      AddReplaceAction('//eqm');
+      AddReplaceAction('// eqm610');
+      AddReplaceAction('//eqm610');
+      AddReplaceAction('// eqm610');
+      AddReplaceAction('//  eqm610');
+
+      //AddReplaceAction('//validate');
+      //AddReplaceAction('//if');
+      //AddReplaceAction('//testfield');
+      AddReplaceAction('// eqm');
+      //AddReplaceAction('//create');
+      //AddReplaceAction('//contract');
+      //AddReplaceAction('//  exit');
+      //AddReplaceAction('//exit');
+      //AddReplaceAction('//purch');
+      AddReplaceAction('//form');
+      AddReplaceAction('// form');
+      AddReplaceAction('//  form');
+      AddReplaceAction('// rr34');
+      AddReplaceAction('//:');
+      AddReplaceAction('// service');
+      AddReplaceAction('-- service');
+      AddReplaceAction('cr-');
+      AddReplaceAction('eqm2013');
+      AddReplaceAction('eqm2014');
+      AddReplaceAction('a8');
+      AddReplaceAction('ar01');
+      AddReplaceAction('ar02');
+      AddReplaceAction('ar03');
+      AddReplaceAction('eqm:');
+
+      AddReplaceAction('->');
+      AddReplaceAction('<-');
+
+      AddReplaceAction('<<');
+      AddReplaceAction('>>');
+      AddReplaceAction('// dj');
+    END;
+
+    LOCAL PROCEDURE AddReplaceAction@1000004(NewReplaceAction@1000000 : Text[250]);
+    BEGIN
+      NoOfReplaceActions += 1;
+      ReplaceAction[NoOfReplaceActions] := NewReplaceAction;
+    END;
+
+    LOCAL PROCEDURE BuildExclusiveActionArray@1101101005();
+    BEGIN
+      NoOfExclusiveActions := 0;
+
+      //AddExclusiveAction('service');
+      AddExclusiveAction('eqmna');
+      //AddExclusiveAction('//eqm:armada');
+      //AddExclusiveAction('// eqm:armada');
+    END;
+
+    LOCAL PROCEDURE AddExclusiveAction@1101101003(NewExclusiveAction@1101101000 : Text[250]);
+    BEGIN
+      NoOfExclusiveActions += 1;
+      ExclusiveAction[NoOfExclusiveActions] := NewExclusiveAction;
+    END;
+
+    LOCAL PROCEDURE IdRange@1101101001(ObjId@1101101000 : Integer) : Boolean;
+    BEGIN
+      EXIT(TRUE);
+
+      IF ((ObjId >= 15000600) AND (ObjId <= 15000899)) OR
+         ((ObjId >= 15008460) AND (ObjId <= 15008599)) THEN
+        EXIT(TRUE)
+      ELSE
+        EXIT(FALSE);
+    END;
+
+    LOCAL PROCEDURE IdRange2@1101101008(ObjId@1101101000 : Integer) : Boolean;
+    BEGIN
+      IF ((ObjId >= 15000600) AND (ObjId <= 15000899)) OR
+         ((ObjId >= 15008460) AND (ObjId <= 15008599)) THEN
+        EXIT(TRUE)
+      ELSE
+        EXIT(FALSE);
+    END;
+
+    LOCAL PROCEDURE SkipObject@15000602(ObjType@15000600 : 'Table,Form,Report,Dataport,XMLport,Codeunit,Page,Query';ObjId@15000601 : Integer) : Boolean;
+    BEGIN
+      CASE ObjType OF
+        ObjType::Report:
+          IF ObjId IN [
+            15008462,
+            15008463,
+            15008464,
+            15008465,
+            15008466,
+            15008467,
+            15008468]
+          THEN
+            EXIT(TRUE);
+      END;
+    END;
+
+    PROCEDURE SetFileName@1101101004(NewFileName@1101101000 : Text);
+    BEGIN
+      FileName[1] := NewFileName;
+    END;
+
+    LOCAL PROCEDURE Get_PROCEDURE_Id@1101101010(VAR CALLine@1101101002 : Text[1024];VAR Procedure_Id@1101101000 : Integer);
+    VAR
+      CALLine2@1101101003 : Text[1024];
+      FoundStrPos@1101101001 : Integer;
+    BEGIN
+      IF STRPOS(CALLine,'PROCEDURE') = 0 THEN
+        EXIT;
+
+      FoundStrPos := STRPOS(CALLine,'@');
+      IF FoundStrPos <> 0 THEN BEGIN
+        CALLine2 := DELSTR(CALLine,1,FoundStrPos);
+        FoundStrPos := STRPOS(CALLine2,'(');
+        IF FoundStrPos <> 0 THEN BEGIN
+          CALLine2 := DELSTR(CALLine2,FoundStrPos);
+          EVALUATE(Procedure_Id,CALLine2);
+        END;
+      END;
+    END;
+
+    PROCEDURE SetLabelText@15000600(PassLabelText@15000600 : Text);
+    BEGIN
+      LabelText := PassLabelText;
+    END;
+
+    LOCAL PROCEDURE OpenToRead@15000607(VAR FileIn@15000603 : File);
+    VAR
+      FileManagement@15000601 : Codeunit 419;
+      ServerFileName@15000602 : Text;
+    BEGIN
+      //oFile.OPEN(FileName[1]);
+      IF FileManagement.CanRunDotNetOnClient THEN
+        IF NOT FileManagement.ClientFileExists(FileName[1]) THEN
+          ERROR(FileDoesNotExistErr,FileManagement.GetFileName(FileName[1]));
+
+      IF NOT FileManagement.CanRunDotNetOnClient THEN
+        IF NOT FileManagement.ServerFileExists(FileName[1]) THEN
+          ERROR(FileDoesNotExistErr,FileName[1]);
+
+      IF FileManagement.CanRunDotNetOnClient THEN
+        ServerFileName := FileManagement.UploadFileSilent(FileName[1])
+      ELSE
+        ServerFileName := FileName[1];
+
+      IF NOT FileIn.OPEN(ServerFileName) THEN
+        IF FileManagement.CanRunDotNetOnClient THEN
+          ERROR(FileCouldNotBeReadErr,FileManagement.GetFileName(FileName[1]))
+        ELSE
+          ERROR(FileCouldNotBeReadErr,FileName[1]);
+    END;
+
+    BEGIN
+    END.
+  }
+}
+
